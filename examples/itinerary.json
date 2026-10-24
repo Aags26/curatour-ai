@@ -1,0 +1,69 @@
+{
+  "itinerary_id": "itin_001",
+  "inquiry_id": "inq_001",
+  "version": 1,
+  "parent_version": null,
+  "created_by": "ai",
+  "created_at": "2026-10-24T10:16:00+05:30",
+  "summary": {
+    "title": "Japan honeymoon - arrival-day illustration only",
+    "destinations": ["Tokyo"],
+    "start_date": null,
+    "end_date": null,
+    "party": { "adults": 2, "children_ages": [] },
+    "currency": "INR"
+  },
+  "days": [
+    {
+      "index": 1,
+      "date": null,
+      "city": "Tokyo",
+      "theme": "Arrival and relaxed evening",
+      "items": [
+        {
+          "item_id": "arrival_transfer",
+          "type": "transfer",
+          "title": "Airport to hotel transfer",
+          "description": "Select route and supplier after the airport, hotel and arrival details are known.",
+          "start_time": null,
+          "end_time": null,
+          "location": { "name": "Arrival airport and hotel to be selected", "city": "Tokyo" },
+          "cost": { "amount": null, "currency": "INR", "basis": "total", "source": null },
+          "depends_on": ["hotel_stay"],
+          "supplier_ref": null,
+          "status": "proposed"
+        },
+        {
+          "item_id": "hotel_stay",
+          "type": "hotel",
+          "title": "Hotel stay - property to be selected",
+          "description": "Planner to select a mid-range property. Record the full stay cost on this item once.",
+          "start_time": null,
+          "end_time": null,
+          "location": { "name": "Property to be selected", "city": "Tokyo" },
+          "cost": { "amount": null, "currency": "INR", "basis": "total", "source": null },
+          "depends_on": [],
+          "supplier_ref": null,
+          "status": "proposed"
+        }
+      ]
+    }
+  ],
+  "cost_summary": {
+    "total_estimate": null,
+    "by_category": { "flights": null, "hotels": null, "activities": null, "transfers": null, "other": null },
+    "confidence": "low"
+  },
+  "assumptions": [
+    "Hotel tier defaulted to mid-range; confirm with the client.",
+    "Pace defaulted to balanced; confirm with the client.",
+    "This synthetic schema illustration is not a generated proposal: the linked inquiry is incomplete and only arrival day is shown."
+  ],
+  "validation_flags": [
+    { "check": "required_fields", "status": "fail", "message": "Passport nationality is missing; production drafting must remain blocked." },
+    { "check": "requirements_coverage", "status": "fail", "message": "Arrival-day illustration only, not the requested seven-day itinerary." },
+    { "check": "budget_fit", "status": "warn", "message": "Cannot assess: flight inclusions and prices are unknown." },
+    { "check": "date_consistency", "status": "warn", "message": "Only May 2027 is known; exact dates are unresolved." }
+  ],
+  "source_itineraries": []
+}

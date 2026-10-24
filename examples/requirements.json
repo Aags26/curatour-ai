@@ -1,0 +1,37 @@
+{
+  "inquiry_id": "inq_001",
+  "channel": "whatsapp",
+  "raw_text": "We are two adults, no children or seniors, planning a 7-day honeymoon in Japan in May 2027, dates flexible. Departing Mumbai. Total budget INR 400000. We like food and culture and have no dietary restrictions. Please suggest hotels and activities.",
+  "received_at": "2026-10-24T10:15:00+05:30",
+  "destination": { "value": ["Japan"], "source": "client", "confidence": 0.95 },
+  "dates": {
+    "value": { "start_date": null, "end_date": null, "flexible": true, "month_hint": "May 2027" },
+    "source": "client",
+    "confidence": 0.95
+  },
+  "duration_days": { "value": 7, "source": "client", "confidence": 0.95 },
+  "party": {
+    "value": { "adults": 2, "children_ages": [], "seniors": 0 },
+    "source": "client",
+    "confidence": 0.95
+  },
+  "budget": {
+    "value": { "amount": 400000, "currency": "INR", "basis": "total", "includes_flights": null },
+    "source": "client",
+    "confidence": 0.9
+  },
+  "departure_city": { "value": "Mumbai", "source": "client", "confidence": 0.95 },
+  "passport_nationality": { "value": null, "source": null, "confidence": null },
+  "trip_type": { "value": "honeymoon", "source": "client", "confidence": 0.95 },
+  "hotel_tier": { "value": "mid", "source": "default", "confidence": 0.3 },
+  "pace": { "value": "balanced", "source": "default", "confidence": 0.3 },
+  "interests": { "value": ["food", "culture"], "source": "client", "confidence": 0.95 },
+  "dietary_needs": { "value": [], "source": "client", "confidence": 0.95 },
+  "mobility_or_health_notes": { "value": null, "source": null, "confidence": null },
+  "flight_preferences": { "value": null, "source": null, "confidence": null },
+  "already_booked": { "value": null, "source": null, "confidence": null },
+  "must_haves": { "value": null, "source": null, "confidence": null },
+  "deal_breakers": { "value": null, "source": null, "confidence": null },
+  "missing_required": ["passport_nationality"],
+  "status": "incomplete"
+}

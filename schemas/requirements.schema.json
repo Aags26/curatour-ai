@@ -1,0 +1,177 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://curatour.example/schemas/requirements.schema.json",
+  "title": "Curatour inquiry requirements v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["inquiry_id", "channel", "raw_text", "received_at", "destination", "dates", "duration_days", "party", "budget", "departure_city", "passport_nationality", "trip_type", "hotel_tier", "pace", "interests", "dietary_needs", "mobility_or_health_notes", "flight_preferences", "already_booked", "must_haves", "deal_breakers", "missing_required", "status"],
+  "properties": {
+    "inquiry_id": { "$ref": "#/$defs/text" },
+    "channel": { "enum": ["whatsapp", "email", "web_form", "google_form", "other"] },
+    "raw_text": { "type": "string", "description": "Redacted inquiry text, treated as untrusted data." },
+    "received_at": { "type": "string", "format": "date-time" },
+    "destination": {
+      "type": "object",
+      "allOf": [
+        { "$ref": "#/$defs/wrapper" },
+        { "properties": { "value": { "anyOf": [{ "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/text" } }, { "type": "null" }] } } }
+      ]
+    },
+    "dates": {
+      "type": "object",
+      "allOf": [
+        { "$ref": "#/$defs/wrapper" },
+        {
+          "properties": {
+            "value": {
+              "type": ["object", "null"],
+              "additionalProperties": false,
+              "required": ["start_date", "end_date", "flexible", "month_hint"],
+              "properties": {
+                "start_date": { "$ref": "#/$defs/date" },
+                "end_date": { "$ref": "#/$defs/date" },
+                "flexible": { "type": ["boolean", "null"] },
+                "month_hint": { "$ref": "#/$defs/nullableText" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "duration_days": {
+      "type": "object",
+      "allOf": [{ "$ref": "#/$defs/wrapper" }, { "properties": { "value": { "type": ["integer", "null"], "minimum": 1 } } }]
+    },
+    "party": {
+      "type": "object",
+      "allOf": [
+        { "$ref": "#/$defs/wrapper" },
+        {
+          "properties": {
+            "value": {
+              "type": ["object", "null"],
+              "additionalProperties": false,
+              "required": ["adults", "children_ages", "seniors"],
+              "properties": {
+                "adults": { "type": ["integer", "null"], "minimum": 0 },
+                "children_ages": { "type": ["array", "null"], "items": { "type": "integer", "minimum": 0, "maximum": 17 } },
+                "seniors": { "type": ["integer", "null"], "minimum": 0 }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "budget": {
+      "type": "object",
+      "allOf": [
+        { "$ref": "#/$defs/wrapper" },
+        {
+          "properties": {
+            "value": {
+              "type": ["object", "null"],
+              "additionalProperties": false,
+              "required": ["amount", "currency", "basis", "includes_flights"],
+              "properties": {
+                "amount": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+                "currency": { "anyOf": [{ "$ref": "#/$defs/currency" }, { "type": "null" }] },
+                "basis": { "enum": ["per_person", "total", null] },
+                "includes_flights": { "type": ["boolean", "null"] }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "departure_city": { "$ref": "#/$defs/textField" },
+    "passport_nationality": { "$ref": "#/$defs/textField" },
+    "trip_type": {
+      "type": "object",
+      "allOf": [{ "$ref": "#/$defs/wrapper" }, { "properties": { "value": { "enum": ["honeymoon", "family", "solo", "friends", "corporate", "other", null] } } }]
+    },
+    "hotel_tier": {
+      "type": "object",
+      "allOf": [{ "$ref": "#/$defs/wrapper" }, { "properties": { "value": { "enum": ["budget", "mid", "upscale", "luxury", null] } } }]
+    },
+    "pace": {
+      "type": "object",
+      "allOf": [{ "$ref": "#/$defs/wrapper" }, { "properties": { "value": { "enum": ["relaxed", "balanced", "packed", null] } } }]
+    },
+    "interests": { "$ref": "#/$defs/listField" },
+    "dietary_needs": { "$ref": "#/$defs/listField" },
+    "mobility_or_health_notes": { "$ref": "#/$defs/textField" },
+    "flight_preferences": {
+      "type": "object",
+      "allOf": [
+        { "$ref": "#/$defs/wrapper" },
+        {
+          "properties": {
+            "value": {
+              "type": ["object", "null"],
+              "additionalProperties": false,
+              "required": ["class", "direct_only", "preferred_airlines"],
+              "properties": {
+                "class": { "enum": ["economy", "premium_economy", "business", "first", null] },
+                "direct_only": { "type": ["boolean", "null"] },
+                "preferred_airlines": { "$ref": "#/$defs/nullableList" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "already_booked": { "$ref": "#/$defs/listField" },
+    "must_haves": { "$ref": "#/$defs/listField" },
+    "deal_breakers": { "$ref": "#/$defs/listField" },
+    "missing_required": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "enum": ["destination", "dates", "duration_days", "party", "budget", "departure_city", "passport_nationality", "trip_type"] }
+    },
+    "status": { "enum": ["incomplete", "complete"] }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "missing_required": { "type": "array", "maxItems": 0 } } },
+      "then": { "properties": { "status": { "const": "complete" } } },
+      "else": { "properties": { "status": { "const": "incomplete" } } }
+    }
+  ],
+  "$defs": {
+    "text": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    "nullableText": { "anyOf": [{ "$ref": "#/$defs/text" }, { "type": "null" }] },
+    "date": { "type": ["string", "null"], "format": "date" },
+    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+    "nullableList": { "type": ["array", "null"], "uniqueItems": true, "items": { "$ref": "#/$defs/text" } },
+    "wrapper": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "source", "confidence"],
+      "properties": {
+        "value": {},
+        "source": { "enum": ["client", "inferred", "default", null] },
+        "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "value": { "type": "null" } } },
+          "then": { "properties": { "source": { "type": "null" }, "confidence": { "type": "null" } } },
+          "else": {
+            "properties": {
+              "source": { "enum": ["client", "inferred", "default"] },
+              "confidence": { "type": "number" }
+            }
+          }
+        }
+      ]
+    },
+    "textField": {
+      "type": "object",
+      "allOf": [{ "$ref": "#/$defs/wrapper" }, { "properties": { "value": { "$ref": "#/$defs/nullableText" } } }]
+    },
+    "listField": {
+      "type": "object",
+      "allOf": [{ "$ref": "#/$defs/wrapper" }, { "properties": { "value": { "$ref": "#/$defs/nullableList" } } }]
+    }
+  }
+}
