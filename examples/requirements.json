@@ -5,7 +5,7 @@
   "received_at": "2026-10-24T10:15:00+05:30",
   "destination": { "value": ["Japan"], "source": "client", "confidence": 0.95 },
   "dates": {
-    "value": { "start_date": null, "end_date": null, "flexible": true, "month_hint": "May 2027" },
+    "value": { "start_date": null, "end_date": null, "flexible": true, "month_hint": "2027-05" },
     "source": "client",
     "confidence": 0.95
   },

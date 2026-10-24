@@ -31,7 +31,11 @@
                 "start_date": { "$ref": "#/$defs/date" },
                 "end_date": { "$ref": "#/$defs/date" },
                 "flexible": { "type": ["boolean", "null"] },
-                "month_hint": { "$ref": "#/$defs/nullableText" }
+                "month_hint": {
+                  "type": ["string", "null"],
+                  "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])$",
+                  "description": "Canonical year-month only. Unknown year or ambiguous month is null and requires follow-up."
+                }
               }
             }
           }

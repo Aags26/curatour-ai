@@ -34,7 +34,7 @@ requirementProbe('nonsense month', x => {
   x.dates.value.start_date = null;
   x.dates.value.end_date = null;
   x.dates.value.month_hint = 'banana';
-}, 'date_consistency');
+}, 'required_fields');
 requirementProbe('empty party', x => { x.party.value.adults = 0; }, 'party');
 requirementProbe('unknown currency', x => { x.budget.value.currency = 'ZZZ'; }, 'currency');
 requirementProbe('all-null date object', x => {
@@ -399,13 +399,14 @@ test('unrepresentable category totals are rejected rather than overflowing', () 
   assert.ok(has(validateItinerary(value, complete, context), 'cost_summary'));
 });
 
-test('yearless month remains usable without inventing a year', () => {
+test('yearless month requires follow-up without inventing a year', () => {
   const value = clone(complete);
   value.dates.value = { start_date: null, end_date: null, flexible: true, month_hint: 'May' };
   const report = validateRequirements(value);
-  assert.equal(report.valid, true);
-  assert.equal(report.value.status, 'complete');
-  assert.ok(has(report, 'date_consistency', 'warn'));
+  assert.equal(report.valid, false);
+  assert.equal(report.value.status, 'incomplete');
+  assert.equal(report.value.dates.value.month_hint, null);
+  assert.ok(has(report, 'month_hint_follow_up', 'warn'));
 });
 
 test('single endpoint without a month is incomplete, not an invented date pair', () => {

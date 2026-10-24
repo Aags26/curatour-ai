@@ -59,10 +59,15 @@ party/budget/date members are not wrapped. Metadata (`inquiry_id`, `channel`,
   Summary `adults` includes seniors, matching the lean itinerary contract.
 - `duration_days` is inclusive calendar days, not hotel nights. **There is no
   duration cap or long-trip warning.** Exact start/end dates must match duration.
-- Month hints accept `YYYY-MM` or an English full/three-letter month name with
-  optional year, case insensitive (e.g. `May 2027`, `may`, `Sep 2027`).
-  Other text is explicitly rejected for clarification, not guessed. Yearless
-  months produce a warning; no year is invented.
+- Stored and model-extracted month hints are strictly `YYYY-MM` or null.
+  Input helpers normalize legacy English full/three-letter month names with a
+  year, including `Sept` (e.g. `May 2027` -> `2027-05`, `Sept 2027` -> `2027-09`).
+  Names are case insensitive and surrounding whitespace is trimmed.
+  Ambiguous, unrecognized or yearless hints (`late May 2027`, `May-June 2027`,
+  `May, 2027`, `May`, `banana`) become null with a `month_hint_follow_up` warning.
+  No month/year is guessed. Unless an exact pair remains, dates count as missing;
+  no additional date-consistency failure is emitted for the discarded hint.
+  The raw redacted inquiry preserves context for the follow-up workflow.
 - Optional unknowns stay null. Defaults are not inserted by schemas or validators.
   Only apply planner-approved defaults, tag them as default and surface them in
   assumptions. Never default health, dietary needs, nationality or bookings to none.
@@ -71,7 +76,7 @@ party/budget/date members are not wrapped. Metadata (`inquiry_id`, `channel`,
 Draft-blocking fields are destination, dates, duration_days, party, budget,
 departure_city, passport_nationality and trip_type. The validator recomputes
 `missing_required` from null top-level values, with the additional date rule:
-an exact date pair or a recognized month hint plus duration is required.
+an exact date pair or a canonical year-month hint plus duration is required.
 
 It also recomputes status and flags supplied metadata that disagrees. A complete
 status does not imply complete nested facts or feasibility: unknown budget
@@ -85,13 +90,28 @@ question generation is not implemented; use at most five questions per round.
 structurally invalid payloads/context; otherwise they return:
 
 ```js
-{ value, flags, valid }
+{
+  value, flags,
+  noFailures,
+  valid, // compatibility alias of noFailures
+  unassessedChecks, unassessedCheckCount,
+  readyToSend: false
+  // Requirements reports additionally include complete.
+}
 ```
 
 `value` is a cloned, corrected record. Requirements metadata, itinerary cost
 summaries and itinerary validation flags are computed, not trusted from a model.
-Input objects are never mutated. `valid` means **no fail flags**, not approved,
-bookable or safe for client delivery; all warnings still need planner attention.
+Input objects are never mutated. `noFailures` means **no fail flags** in both APIs.
+`valid` has exactly the same meaning and remains for compatibility; prefer the
+explicit name in new consumers. Requirements `complete` reflects only the derived
+top-level status, so a complete inquiry can still have semantic failures.
+Missing required fields produce failures, so incomplete inquiries have
+`noFailures: false`. Neither noFailures nor complete means approved, bookable or
+safe for client delivery. `readyToSend` is always false under the draft-only policy.
+`unassessedChecks` lists unique warning check names whose messages explicitly say
+"cannot assess"; `unassessedCheckCount` is its length, not the total warning count.
+All warnings, including follow-up hints, still need planner attention.
 Mismatched metadata or contradictory numeric totals remain fail flags even though
 the returned values are corrected. Null summary placeholders may be filled from
 known item prices without failing; unsupported confidence is lowered with a
@@ -109,11 +129,49 @@ const report = validateItinerary(draft, intake.value, {
   as_of: '2026-10-24T11:00:00+05:30',
   pricing_categories: ['hotels', 'transfers', 'other']
 });
-// Check intake.valid and report.valid, then show ALL flags to the planner.
+// Check intake.noFailures and report.noFailures, then show ALL flags to the planner.
 ```
 
 Callers must not drop failures from an earlier intake report merely by passing
 its corrected value onward. Keep both reports in the inquiry trace.
+
+### Model-output entry point
+
+`extractionSchema`, exported from [contracts.cjs](src/contracts.cjs), is generated
+from the requirements contract and contains **only the wrapped trip fields**.
+It excludes all six system/derived properties and rejects unknown keys. Use
+`validateContract('extraction', payload)` to check canonical model output. This
+schema retains general JSON Schema features; provider-specific adaptation remains
+deferred, not silently assumed compatible with any structured-output API.
+
+Use `requirementsFromExtraction(extraction, system)` from
+[validation.cjs](src/validation.cjs) to assemble a stored requirements record:
+
+```js
+const { requirementsFromExtraction } = require('./src/validation.cjs');
+const intake = requirementsFromExtraction(extractedTripWrappers, {
+  inquiry_id: 'inq_001',
+  channel: 'whatsapp',
+  raw_text: redactedInquiry,
+  received_at: '2026-10-24T10:15:00+05:30'
+});
+```
+
+All trip wrapper fields must be present (unknowns use null wrappers). The separate
+system object must contain exactly those four fields. The helper permits legacy
+month strings at its boundary, canonicalizes them, validates the canonical shape,
+then computes missing_required/status itself. It does not invent placeholders
+that the model must echo and does not generate completeness-metadata failures for
+its own derived fields. It returns the same requirements report as validation,
+including explicit warnings for hints requiring follow-up.
+
+`validateRequirements(record)` remains the stored-record validation path: it
+requires all metadata, accepts legacy month strings for migration, returns a
+canonical record, and flags stale completeness claims. Structural
+`validateContract('requirements', record)` stays strict and rejects noncanonical
+month strings; do not persist legacy values without normalization. The boundary
+schemas (`extractionInput`, `requirementsInput`) are permissive only for month-hint
+text, not missing wrapper members, extra fields or invalid system metadata.
 
 ### Enforced semantic checks
 
@@ -208,8 +266,8 @@ be null. Hotel nights, routes, cross-midnight and cross-time-zone feasibility re
 deferred until real itineraries justify richer fields. No naive local-time
 comparison is used to invent a feasibility pass.
 
-Provider-specific structured outputs and a simpler model-facing schema are deferred.
-The eventual model should emit trip wrappers only; code supplies all metadata.
+Provider-specific structured-output adaptation remains deferred. The extraction
+contract now emits trip wrappers only; code supplies all metadata.
 Classification/routing and follow-up generation remain outside these contracts.
 
 ## Safety

@@ -24,8 +24,50 @@ function parseMonth(hint) {
   if (numeric) return { month: Number(numeric[2]), year: Number(numeric[1]) };
   const named = /^([a-z]+)(?:\s+(\d{4}))?$/i.exec(hint.trim());
   if (!named) return null;
-  const month = monthNames.findIndex(name => name === named[1].toLowerCase() || name.slice(0, 3) === named[1].toLowerCase()) + 1;
+  const name = named[1].toLowerCase();
+  const month = name === 'sept' ? 9 : monthNames.findIndex(month => month === name || month.slice(0, 3) === name) + 1;
   return month ? { month, year: named[2] ? Number(named[2]) : null } : null;
+}
+
+function normalizeMonth(extraction) {
+  const value = structuredClone(extraction);
+  const hint = value.dates.value?.month_hint;
+  const flags = [];
+  if (hint !== undefined && hint !== null) {
+    const parsed = parseMonth(hint);
+    if (parsed && parsed.year !== null) {
+      value.dates.value.month_hint = `${String(parsed.year).padStart(4, '0')}-${String(parsed.month).padStart(2, '0')}`;
+    } else {
+      value.dates.value.month_hint = null;
+      flag(flags, 'month_hint_follow_up', 'warn', `Clarify travel month and year: "${hint}" cannot be stored as YYYY-MM; no year or month was guessed.`);
+    }
+    if (Object.values(value.dates.value).every(v => v === null)) {
+      value.dates = { value: null, source: null, confidence: null };
+    }
+  }
+  return { value, flags };
+}
+
+function report(value, flags, requirements = false) {
+  const noFailures = !failed(flags);
+  const unassessedChecks = [...new Set(flags.filter(f => f.status === 'warn' && /cannot assess/i.test(f.message)).map(f => f.check))];
+  return {
+    value, flags, valid: noFailures, noFailures,
+    ...(requirements ? { complete: value.status === 'complete' } : {}),
+    unassessedChecks, unassessedCheckCount: unassessedChecks.length,
+    readyToSend: false
+  };
+}
+
+function requirementsFromExtraction(extraction, system) {
+  assertContract('extractionInput', extraction);
+  assertContract('system', system);
+  const normalized = normalizeMonth(extraction);
+  assertContract('extraction', normalized.value);
+  const result = evaluateRequirements({
+    ...normalized.value, ...structuredClone(system), missing_required: [], status: 'complete'
+  }, false);
+  return report(result.value, [...normalized.flags, ...result.flags], true);
 }
 
 function checkDateRange(start, end, duration, flags, label) {
@@ -39,6 +81,17 @@ function checkDateRange(start, end, duration, flags, label) {
 }
 
 function validateRequirements(input) {
+  assertContract('requirementsInput', input, 'requirements');
+  const trip = {};
+  for (const field of Object.keys(input ?? {})) {
+    if (!['inquiry_id', 'channel', 'raw_text', 'received_at', 'missing_required', 'status'].includes(field)) trip[field] = input[field];
+  }
+  const normalized = normalizeMonth(trip);
+  const result = evaluateRequirements({ ...input, ...normalized.value }, true);
+  return report(result.value, [...normalized.flags, ...result.flags], true);
+}
+
+function evaluateRequirements(input, checkMetadata) {
   assertContract('requirements', input);
   timestamp(input.received_at, 'received_at');
   const value = structuredClone(input);
@@ -60,8 +113,8 @@ function validateRequirements(input) {
   const exactDates = Boolean(dates?.start_date && dates?.end_date);
   const monthDates = Boolean(month && value.duration_days.value !== null);
   const missing = requiredFields.filter(name => value[name].value === null || (name === 'dates' && !exactDates && !monthDates));
-  if (!isDeepStrictEqual([...input.missing_required].sort(), [...missing].sort()) ||
-      input.status !== (missing.length ? 'incomplete' : 'complete')) {
+  if (checkMetadata && (!isDeepStrictEqual([...input.missing_required].sort(), [...missing].sort()) ||
+      input.status !== (missing.length ? 'incomplete' : 'complete'))) {
     flag(flags, 'completeness_metadata', 'fail', 'Supplied completeness metadata disagrees with recomputed requirements.');
   }
   value.missing_required = missing;
@@ -70,10 +123,7 @@ function validateRequirements(input) {
     missing.length ? `Missing draft-blocking fields: ${missing.join(', ')}.` : 'All draft-blocking top-level requirements are present.');
   if (dates) {
     checkDateRange(dates.start_date, dates.end_date, value.duration_days.value, flags, 'Requirements');
-    if (dates.month_hint !== null && !month) {
-      flag(flags, 'date_consistency', 'fail', 'Unrecognized month_hint; use YYYY-MM or an English month name with optional year.');
-    } else if (month) {
-      if (month.year === null) flag(flags, 'date_consistency', 'warn', 'Month has no year; do not invent one.');
+    if (month) {
       if (dates.start_date && (Number(dates.start_date.slice(5, 7)) !== month.month ||
           (month.year !== null && Number(dates.start_date.slice(0, 4)) !== month.year))) {
         flag(flags, 'date_consistency', 'fail', 'Start date contradicts month_hint.');
@@ -89,7 +139,7 @@ function validateRequirements(input) {
   if (value.budget.value?.currency && !currencies.has(value.budget.value.currency)) {
     flag(flags, 'currency', 'fail', 'Budget currency is not in the runtime ISO currency list.');
   }
-  return { value, flags, valid: !failed(flags) };
+  return report(value, flags, true);
 }
 
 function checkGraph(items, flags) {
@@ -381,7 +431,7 @@ function validateItinerary(input, inquiry, context) {
   }
   value.validation_flags = flags;
   assertContract('itinerary', value);
-  return { value, flags, valid: !failed(flags) };
+  return report(value, flags);
 }
 
-module.exports = { validateRequirements, validateItinerary };
+module.exports = { validateRequirements, validateItinerary, requirementsFromExtraction };
