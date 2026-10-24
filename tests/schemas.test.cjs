@@ -1,9 +1,8 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
-const { spawnSync } = require('node:child_process');
 const { test } = require('node:test');
+const { validateContract } = require('../src/contracts.cjs');
 
 const root = path.resolve(__dirname, '..');
 const requirements = JSON.parse(fs.readFileSync(path.join(root, 'examples/requirements.json'), 'utf8'));
@@ -82,29 +81,63 @@ add('itinerary', false, 'duplicate-dependency', x => { x.days[0].items[0].depend
 add('itinerary', false, 'invalid-flag-status', x => { x.validation_flags[0].status = 'unknown'; });
 add('itinerary', false, 'invalid-item-status', x => { x.days[0].items[0].status = 'booked'; });
 add('itinerary', false, 'empty-days', x => { x.days = []; });
+add('requirements', false, 'empty-raw-text', x => { x.raw_text = ''; });
+add('itinerary', true, 'nullable-description', x => { x.days[0].items[0].description = null; });
+add('itinerary', false, 'unpadded-time', x => { x.days[0].items[0].start_time = '9:30'; });
 
-for (const schema of ['requirements', 'itinerary']) {
-  for (const valid of [true, false]) {
-    const selected = cases.filter(c => c.schema === schema && c.valid === valid);
-    test(`${schema}: ${selected.length} ${valid ? 'accepted' : 'rejected'} cases`, () => {
-      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'curatour-schema-'));
-      try {
-        for (const c of selected) fs.writeFileSync(path.join(directory, `${c.name}.json`), JSON.stringify(c.value));
-        const result = spawnSync('npx', [
-          '--yes', '--package', 'ajv-cli', '--package', 'ajv-formats',
-          'ajv', 'test', '--spec=draft2020', '-c', 'ajv-formats', '--strict=true',
-          valid ? '--valid' : '--invalid',
-          '-s', `schemas/${schema}.schema.json`, '-d', path.join(directory, '*.json')
-        ], { cwd: root, encoding: 'utf8' });
-        assert.ifError(result.error);
-        assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
-      } finally {
-        for (const c of selected) {
-          const file = path.join(directory, `${c.name}.json`);
-          if (fs.existsSync(file)) fs.unlinkSync(file);
-        }
-        fs.rmdirSync(directory);
-      }
-    });
-  }
+const expectedErrors = {
+  'bare-trip-field': ['type', '/destination'],
+  'wrapped-metadata': ['enum', '/channel'],
+  'nested-wrappers': ['type', '/party/value/adults'],
+  'unknown-with-source': ['type', '/interests/source'],
+  'unknown-with-confidence': ['type', '/interests/confidence'],
+  'known-without-source': ['enum', '/destination/source'],
+  'known-without-confidence': ['type', '/destination/confidence'],
+  'confidence-over-one': ['maximum', '/destination/confidence'],
+  'confidence-negative': ['minimum', '/destination/confidence'],
+  'empty-destination': ['minItems', '/destination/value'],
+  'empty-text': ['minLength', '/departure_city/value'],
+  'whitespace-text': ['pattern', '/departure_city/value'],
+  'invalid-date': ['format', '/dates/value/start_date'],
+  'invalid-timestamp': ['format', '/received_at'],
+  'unknown-required-name': ['enum', '/missing_required/0'],
+  'duplicate-missing-name': ['uniqueItems', '/missing_required'],
+  'complete-with-missing-fields': ['const', '/status'],
+  'incomplete-with-empty-missing-fields': ['const', '/status'],
+  'missing-wrapper-member': ['required', '/pace'],
+  'extra-wrapper-member': ['additionalProperties', '/pace'],
+  'old-contract-field': ['additionalProperties', ''],
+  'negative-party': ['minimum', '/party/value/adults'],
+  'zero-duration': ['minimum', '/duration_days/value'],
+  'negative-budget': ['exclusiveMinimum', '/budget/value/amount'],
+  'invalid-currency': ['pattern', '/budget/value/currency'],
+  'initial-parent': ['type', '/parent_version'],
+  'revision-without-parent': ['type', '/parent_version'],
+  'invalid-creator': ['enum', '/created_by'],
+  'invalid-time': ['pattern', '/days/0/items/0/end_time'],
+  'invalid-day-date': ['format', '/days/0/date'],
+  'unknown-cost-with-source': ['type', '/days/0/items/0/cost/source'],
+  'known-cost-without-source': ['enum', '/days/0/items/0/cost/source'],
+  'negative-cost': ['minimum', '/days/0/items/0/cost/amount'],
+  'negative-summary': ['minimum', '/cost_summary/total_estimate'],
+  'old-item-shape': ['additionalProperties', '/days/0/items/0'],
+  'duplicate-dependency': ['uniqueItems', '/days/0/items/0/depends_on'],
+  'invalid-flag-status': ['enum', '/validation_flags/0/status'],
+  'invalid-item-status': ['enum', '/days/0/items/0/status'],
+  'empty-days': ['minItems', '/days'],
+  'empty-raw-text': ['minLength', '/raw_text'],
+  'unpadded-time': ['pattern', '/days/0/items/0/start_time']
+};
+
+for (const c of cases) {
+  test(`${c.schema}: ${c.name}`, () => {
+    const result = validateContract(c.schema, c.value);
+    assert.equal(result.valid, c.valid, JSON.stringify(result.errors));
+    if (!c.valid) {
+      assert.ok(expectedErrors[c.name], `Missing expected error for ${c.name}`);
+      const [keyword, instancePath] = expectedErrors[c.name];
+      assert.ok(result.errors.some(e => e.keyword === keyword && e.instancePath === instancePath),
+        JSON.stringify(result.errors));
+    }
+  });
 }

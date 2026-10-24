@@ -108,7 +108,7 @@
         "item_id": { "$ref": "#/$defs/text" },
         "type": { "enum": ["flight", "hotel", "transfer", "activity", "meal", "free_time", "visa_task"] },
         "title": { "$ref": "#/$defs/text" },
-        "description": { "$ref": "#/$defs/text" },
+        "description": { "anyOf": [{ "$ref": "#/$defs/text" }, { "type": "null" }] },
         "start_time": { "$ref": "#/$defs/time" },
         "end_time": { "$ref": "#/$defs/time" },
         "location": {

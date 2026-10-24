@@ -1,0 +1,29 @@
+{
+  "inquiry_id": "inq_complete",
+  "channel": "web_form",
+  "raw_text": "Two adults, no children or seniors. Indian passports. Two-day Singapore honeymoon, May 1-2 2027, departing Mumbai. INR 10000 total excluding flights, hotels and transfers only.",
+  "received_at": "2026-10-24T10:15:00+05:30",
+  "destination": { "value": ["Singapore"], "source": "client", "confidence": 1 },
+  "dates": {
+    "value": { "start_date": "2027-05-01", "end_date": "2027-05-02", "flexible": false, "month_hint": null },
+    "source": "client",
+    "confidence": 1
+  },
+  "duration_days": { "value": 2, "source": "client", "confidence": 1 },
+  "party": { "value": { "adults": 2, "children_ages": [], "seniors": 0 }, "source": "client", "confidence": 1 },
+  "budget": { "value": { "amount": 10000, "currency": "INR", "basis": "total", "includes_flights": false }, "source": "client", "confidence": 1 },
+  "departure_city": { "value": "Mumbai", "source": "client", "confidence": 1 },
+  "passport_nationality": { "value": "Indian", "source": "client", "confidence": 1 },
+  "trip_type": { "value": "honeymoon", "source": "client", "confidence": 1 },
+  "hotel_tier": { "value": null, "source": null, "confidence": null },
+  "pace": { "value": null, "source": null, "confidence": null },
+  "interests": { "value": null, "source": null, "confidence": null },
+  "dietary_needs": { "value": null, "source": null, "confidence": null },
+  "mobility_or_health_notes": { "value": null, "source": null, "confidence": null },
+  "flight_preferences": { "value": null, "source": null, "confidence": null },
+  "already_booked": { "value": null, "source": null, "confidence": null },
+  "must_haves": { "value": null, "source": null, "confidence": null },
+  "deal_breakers": { "value": null, "source": null, "confidence": null },
+  "missing_required": [],
+  "status": "complete"
+}

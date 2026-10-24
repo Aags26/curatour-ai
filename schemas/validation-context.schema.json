@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://curatour.example/schemas/validation-context.schema.json",
+  "title": "Trusted application validation context (never model input)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["as_of"],
+  "properties": {
+    "as_of": { "type": "string", "format": "date-time" },
+    "pricing_categories": {
+      "type": ["array", "null"],
+      "uniqueItems": true,
+      "items": { "enum": ["flights", "hotels", "activities", "transfers", "other"] }
+    },
+    "history": {
+      "type": "array",
+      "items": { "$ref": "https://curatour.example/schemas/itinerary.schema.json" }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["itinerary_id", "version", "item", "verified_at", "valid_until"],
+        "properties": {
+          "itinerary_id": { "$ref": "#/$defs/text" },
+          "version": { "type": "integer", "minimum": 1 },
+          "item": { "$ref": "https://curatour.example/schemas/itinerary.schema.json#/$defs/item" },
+          "verified_at": { "type": "string", "format": "date-time" },
+          "valid_until": { "type": ["string", "null"], "format": "date-time" }
+        }
+      }
+    },
+    "fx_rates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["from", "to", "rate", "as_of", "evidence_ref"],
+        "properties": {
+          "from": { "$ref": "#/$defs/currency" },
+          "to": { "$ref": "#/$defs/currency" },
+          "rate": { "type": "string", "pattern": "^(?:[0-9]+)(?:\\.[0-9]+)?$" },
+          "as_of": { "type": "string", "format": "date" },
+          "evidence_ref": { "$ref": "#/$defs/text" }
+        }
+      }
+    },
+    "per_person_counts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["itinerary_id", "version", "item_id", "count", "evidence_ref"],
+        "properties": {
+          "itinerary_id": { "$ref": "#/$defs/text" },
+          "version": { "type": "integer", "minimum": 1 },
+          "item_id": { "$ref": "#/$defs/text" },
+          "count": { "type": "integer", "minimum": 0 },
+          "evidence_ref": { "$ref": "#/$defs/text" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "text": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" }
+  }
+}

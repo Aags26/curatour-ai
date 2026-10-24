@@ -1,0 +1,81 @@
+{
+  "itinerary_id": "itin_priced",
+  "inquiry_id": "inq_complete",
+  "version": 1,
+  "parent_version": null,
+  "created_by": "ai",
+  "created_at": "2026-10-24T10:16:00+05:30",
+  "summary": {
+    "title": "Synthetic two-day Singapore trip",
+    "destinations": ["Singapore"],
+    "start_date": "2027-05-01",
+    "end_date": "2027-05-02",
+    "party": { "adults": 2, "children_ages": [] },
+    "currency": "INR"
+  },
+  "days": [
+    {
+      "index": 1,
+      "date": "2027-05-01",
+      "city": "Singapore",
+      "theme": "Arrival and hotel",
+      "items": [
+        {
+          "item_id": "hotel_stay",
+          "type": "hotel",
+          "title": "One-night hotel stay",
+          "description": null,
+          "start_time": null,
+          "end_time": null,
+          "location": { "name": "Illustrative hotel", "city": "Singapore" },
+          "cost": { "amount": 5000, "currency": "INR", "basis": "total", "source": "estimate" },
+          "depends_on": [],
+          "supplier_ref": null,
+          "status": "proposed"
+        },
+        {
+          "item_id": "arrival_transfer",
+          "type": "transfer",
+          "title": "Arrival transfer",
+          "description": null,
+          "start_time": null,
+          "end_time": null,
+          "location": { "name": "Airport to hotel", "city": "Singapore" },
+          "cost": { "amount": 500, "currency": "INR", "basis": "per_person", "source": "estimate" },
+          "depends_on": ["hotel_stay"],
+          "supplier_ref": null,
+          "status": "proposed"
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "date": "2027-05-02",
+      "city": "Singapore",
+      "theme": "Independent morning",
+      "items": [
+        {
+          "item_id": "free_morning",
+          "type": "free_time",
+          "title": "Free morning",
+          "description": null,
+          "start_time": null,
+          "end_time": null,
+          "location": { "name": "Hotel area", "city": "Singapore" },
+          "cost": { "amount": 0, "currency": "INR", "basis": "total", "source": "estimate" },
+          "depends_on": [],
+          "supplier_ref": null,
+          "status": "proposed"
+        }
+      ]
+    }
+  ],
+  "cost_summary": {
+    "total_estimate": 6000,
+    "by_category": { "flights": 0, "hotels": 5000, "activities": 0, "transfers": 1000, "other": 0 },
+    "confidence": "low"
+  },
+  "assumptions": ["All prices are synthetic estimates, not supplier prices."],
+  "validation_flags": [],
+  "source_itineraries": []
+}

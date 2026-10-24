@@ -8,7 +8,7 @@
   "properties": {
     "inquiry_id": { "$ref": "#/$defs/text" },
     "channel": { "enum": ["whatsapp", "email", "web_form", "google_form", "other"] },
-    "raw_text": { "type": "string", "description": "Redacted inquiry text, treated as untrusted data." },
+    "raw_text": { "type": "string", "minLength": 1, "description": "Redacted inquiry text, treated as untrusted data." },
     "received_at": { "type": "string", "format": "date-time" },
     "destination": {
       "type": "object",
