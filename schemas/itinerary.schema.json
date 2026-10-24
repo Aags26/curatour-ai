@@ -81,7 +81,9 @@
         "properties": {
           "check": { "$ref": "#/$defs/text" },
           "status": { "enum": ["pass", "warn", "fail"] },
-          "message": { "$ref": "#/$defs/text" }
+          "message": { "$ref": "#/$defs/text" },
+          "unassessed": { "type": "boolean" },
+          "needsFollowUp": { "type": "boolean" }
         }
       }
     },

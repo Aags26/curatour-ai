@@ -8,7 +8,7 @@ const categories = ['flights', 'hotels', 'activities', 'transfers', 'other'];
 const categoryFor = { flight: 'flights', hotel: 'hotels', activity: 'activities', transfer: 'transfers', meal: 'other', free_time: 'other', visa_task: 'other' };
 const monthNames = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
 const dayNumber = date => Date.parse(`${date}T00:00:00Z`) / 86400000;
-const flag = (flags, check, status, message) => flags.push({ check, status, message });
+const flag = (flags, check, status, message, markers = {}) => flags.push({ check, status, message, ...markers });
 const failed = flags => flags.some(f => f.status === 'fail');
 const itemKey = (id, version, itemId) => JSON.stringify([id, version, itemId]);
 
@@ -37,9 +37,12 @@ function normalizeMonth(extraction) {
     const parsed = parseMonth(hint);
     if (parsed && parsed.year !== null) {
       value.dates.value.month_hint = `${String(parsed.year).padStart(4, '0')}-${String(parsed.month).padStart(2, '0')}`;
+      if (hint !== value.dates.value.month_hint) {
+        flag(flags, 'month_hint_normalized', 'warn', `Normalized month hint ${JSON.stringify(hint)} to ${value.dates.value.month_hint}.`);
+      }
     } else {
       value.dates.value.month_hint = null;
-      flag(flags, 'month_hint_follow_up', 'warn', `Clarify travel month and year: "${hint}" cannot be stored as YYYY-MM; no year or month was guessed.`);
+      flag(flags, 'month_hint_follow_up', 'warn', `Clarify travel month and year: ${JSON.stringify(hint)} cannot be stored as YYYY-MM; no year or month was guessed.`, { needsFollowUp: true });
     }
     if (Object.values(value.dates.value).every(v => v === null)) {
       value.dates = { value: null, source: null, confidence: null };
@@ -50,12 +53,12 @@ function normalizeMonth(extraction) {
 
 function report(value, flags, requirements = false) {
   const noFailures = !failed(flags);
-  const unassessedChecks = [...new Set(flags.filter(f => f.status === 'warn' && /cannot assess/i.test(f.message)).map(f => f.check))];
+  const unassessedChecks = [...new Set(flags.filter(f => f.unassessed === true).map(f => f.check))];
   return {
-    value, flags, valid: noFailures, noFailures,
+    value, flags, noFailures,
+    needsFollowUp: flags.some(f => f.needsFollowUp === true),
     ...(requirements ? { complete: value.status === 'complete' } : {}),
-    unassessedChecks, unassessedCheckCount: unassessedChecks.length,
-    readyToSend: false
+    unassessedChecks
   };
 }
 
@@ -76,7 +79,7 @@ function checkDateRange(start, end, duration, flags, label) {
     if (days < 1) flag(flags, 'date_consistency', 'fail', `${label}: end date precedes start date.`);
     else if (duration !== null && days !== duration) flag(flags, 'date_consistency', 'fail', `${label}: date interval does not match duration_days.`);
   } else if (start || end) {
-    flag(flags, 'date_consistency', 'warn', `${label}: cannot assess date interval with only one endpoint.`);
+    flag(flags, 'date_consistency', 'warn', `${label}: cannot assess date interval with only one endpoint.`, { unassessed: true, needsFollowUp: true });
   }
 }
 
@@ -103,8 +106,9 @@ function evaluateRequirements(input, checkMetadata) {
       if (entries.every(v => v === null)) {
         Object.assign(field, { value: null, source: null, confidence: null });
         flag(flags, 'empty_object', 'fail', `${name}: all-null object normalized to an unknown field.`);
-      } else if (entries.some(v => v === null)) {
-        flag(flags, 'partial_fields', 'warn', `${name}: unresolved subfields require follow-up.`);
+      } else if (entries.some(v => v === null) &&
+          !(name === 'dates' && field.value.start_date && field.value.end_date)) {
+        flag(flags, 'partial_fields', 'warn', `${name}: unresolved subfields require follow-up.`, { needsFollowUp: true });
       }
     }
   }
@@ -120,10 +124,15 @@ function evaluateRequirements(input, checkMetadata) {
   value.missing_required = missing;
   value.status = missing.length ? 'incomplete' : 'complete';
   flag(flags, 'required_fields', missing.length ? 'fail' : 'pass',
-    missing.length ? `Missing draft-blocking fields: ${missing.join(', ')}.` : 'All draft-blocking top-level requirements are present.');
+    missing.length ? `Missing draft-blocking fields: ${missing.join(', ')}.` : 'All draft-blocking top-level requirements are present.', { needsFollowUp: missing.length > 0 });
   if (dates) {
     checkDateRange(dates.start_date, dates.end_date, value.duration_days.value, flags, 'Requirements');
     if (month) {
+      // Compare calendar months in the inquiry's recorded offset, not the host's timezone.
+      const receivedMonth = input.received_at.slice(0, 7);
+      if (dates.month_hint < receivedMonth) {
+        flag(flags, 'past_month', 'warn', `Travel month ${dates.month_hint} precedes inquiry month ${receivedMonth}; confirm the intended dates.`, { needsFollowUp: true });
+      }
       if (dates.start_date && (Number(dates.start_date.slice(5, 7)) !== month.month ||
           (month.year !== null && Number(dates.start_date.slice(0, 4)) !== month.year))) {
         flag(flags, 'date_consistency', 'fail', 'Start date contradicts month_hint.');
@@ -266,7 +275,7 @@ function computeCosts(value, items, context, indexes, party, flags) {
   let scopeValid = Array.isArray(scope);
   const countKnown = party && party.adults !== null && party.seniors !== null && party.children_ages !== null;
   const partySize = countKnown ? party.adults + party.seniors + party.children_ages.length : null;
-  if (!scopeValid) flag(flags, 'pricing_scope', 'warn', 'Cannot assess full pricing without trusted pricing_categories.');
+  if (!scopeValid) flag(flags, 'pricing_scope', 'warn', 'Cannot assess full pricing without trusted pricing_categories.', { unassessed: true });
   if (scopeValid) {
     for (const category of scope) {
       if (!items.some(item => categoryFor[item.type] === category)) unknown.add(category);
@@ -300,7 +309,7 @@ function computeCosts(value, items, context, indexes, party, flags) {
       const countRecord = indexes.counts.get(itemKey(value.itinerary_id, value.version, item.item_id));
       const multiplier = countRecord?.count ?? (countKnown && party.children_ages.length === 0 ? partySize : null);
       if (multiplier === null || partySize === null || multiplier > partySize || multiplier <= 0) {
-        flag(flags, 'per_person_pricing', 'warn', `${item.item_id}: cannot assess chargeable traveler count; child-sensitive prices need trusted per_person_counts.`);
+        flag(flags, 'per_person_pricing', 'warn', `${item.item_id}: cannot assess chargeable traveler count; child-sensitive prices need trusted per_person_counts.`, { unassessed: true });
         unknown.add(category);
         continue;
       }
@@ -329,7 +338,7 @@ function computeCosts(value, items, context, indexes, party, flags) {
   if (claimed.confidence !== 'low') {
     flag(flags, 'pricing_confidence', 'warn', 'Confidence reset to low: a trusted pricing-quality policy is not implemented.');
   }
-  if (!complete) flag(flags, 'cost_completeness', 'warn', 'Cannot assess total: scope, pricing, evidence or traveler counts are unresolved.');
+  if (!complete) flag(flags, 'cost_completeness', 'warn', 'Cannot assess total: scope, pricing, evidence or traveler counts are unresolved.', { unassessed: true });
   else flag(flags, 'cost_completeness', 'pass', 'All scoped item costs are normalized and summed.');
   value.cost_summary = computed;
   return { totals, scopeValid, partySize };
@@ -339,17 +348,17 @@ function checkBudget(value, requirements, costs, context, indexes, flags) {
   const budget = requirements.budget.value;
   if (!budget || budget.amount === null || budget.currency === null || budget.basis === null || budget.includes_flights === null ||
       !costs.scopeValid || !currencies.has(budget.currency) || !currencies.has(value.summary.currency)) {
-    flag(flags, 'budget_fit', 'warn', 'Cannot assess budget: currency, basis, inclusions or pricing scope are unresolved.');
+    flag(flags, 'budget_fit', 'warn', 'Cannot assess budget: currency, basis, inclusions or pricing scope are unresolved.', { unassessed: true });
     return;
   }
   if (context.pricing_categories.includes('flights') !== budget.includes_flights) {
-    flag(flags, 'budget_fit', 'warn', 'Cannot assess budget: flight inclusion differs from declared pricing scope.');
+    flag(flags, 'budget_fit', 'warn', 'Cannot assess budget: flight inclusion differs from declared pricing scope.', { unassessed: true });
     return;
   }
   let limit = new Decimal(budget.amount);
   if (budget.basis === 'per_person') {
     if (costs.partySize === null) {
-      flag(flags, 'budget_fit', 'warn', 'Cannot assess per-person budget without a known party size.');
+      flag(flags, 'budget_fit', 'warn', 'Cannot assess per-person budget without a known party size.', { unassessed: true });
       return;
     }
     limit = limit.mul(costs.partySize);
@@ -357,14 +366,14 @@ function checkBudget(value, requirements, costs, context, indexes, flags) {
   if (budget.currency !== value.summary.currency) {
     const rate = indexes.fx.get(JSON.stringify([budget.currency, value.summary.currency]));
     if (!rate) {
-      flag(flags, 'budget_fit', 'warn', 'Cannot assess budget without trusted conversion to summary currency.');
+      flag(flags, 'budget_fit', 'warn', 'Cannot assess budget without trusted conversion to summary currency.', { unassessed: true });
       return;
     }
     limit = limit.mul(rate.rate);
   }
   const subtotal = Object.values(costs.totals).reduce((sum, amount) => sum.plus(roundMoney(amount, value.summary.currency)), new Decimal(0));
   if (subtotal.gt(roundMoney(limit, value.summary.currency))) flag(flags, 'budget_fit', 'fail', 'Known scoped subtotal exceeds budget, including any still-unpriced items.');
-  else if (value.cost_summary.total_estimate === null) flag(flags, 'budget_fit', 'warn', 'Cannot assess budget fit until scoped costs are complete.');
+  else if (value.cost_summary.total_estimate === null) flag(flags, 'budget_fit', 'warn', 'Cannot assess budget fit until scoped costs are complete.', { unassessed: true });
   else flag(flags, 'budget_fit', 'pass', 'Computed scoped total is within the matching budget.');
 }
 
@@ -386,7 +395,7 @@ function validateItinerary(input, inquiry, context) {
     if (value.summary.party.adults !== party.adults + party.seniors ||
         !isDeepStrictEqual(value.summary.party.children_ages, party.children_ages)) flag(flags, 'party', 'fail', 'Summary party differs from requirements (summary adults includes seniors).');
   } else {
-    flag(flags, 'party', 'warn', 'Cannot assess summary party against unresolved inquiry counts.');
+    flag(flags, 'party', 'warn', 'Cannot assess summary party against unresolved inquiry counts.', { unassessed: true, needsFollowUp: true });
   }
   const duration = requirements.value.duration_days.value;
   checkDateRange(value.summary.start_date, value.summary.end_date, duration, flags, 'Summary');
@@ -421,13 +430,13 @@ function validateItinerary(input, inquiry, context) {
     flag(flags, 'date_consistency', 'fail', 'Last day does not match summary end date.');
   }
   if (!value.summary.start_date || !value.summary.end_date || value.days.some(d => d.date === null)) {
-    flag(flags, 'date_consistency', 'warn', 'Cannot assess all calendar checks without exact dates.');
+    flag(flags, 'date_consistency', 'warn', 'Cannot assess all calendar checks without exact dates.', { unassessed: true, needsFollowUp: true });
   }
   if (!currencies.has(value.summary.currency)) flag(flags, 'currency', 'fail', 'Summary currency is not in the runtime ISO currency list.');
   const costs = computeCosts(value, items, context, indexes, party, flags);
   checkBudget(value, requirements.value, costs, context, indexes, flags);
   for (const check of ['travel_times', 'opening_days', 'visa_lead_time', 'valid_suppliers', 'constraint_coverage']) {
-    flag(flags, check, 'warn', 'Cannot assess: trusted feasibility/constraint data integration is not implemented.');
+    flag(flags, check, 'warn', 'Cannot assess: trusted feasibility/constraint data integration is not implemented.', { unassessed: true });
   }
   value.validation_flags = flags;
   assertContract('itinerary', value);

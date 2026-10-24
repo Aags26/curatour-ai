@@ -63,11 +63,19 @@ party/budget/date members are not wrapped. Metadata (`inquiry_id`, `channel`,
   Input helpers normalize legacy English full/three-letter month names with a
   year, including `Sept` (e.g. `May 2027` -> `2027-05`, `Sept 2027` -> `2027-09`).
   Names are case insensitive and surrounding whitespace is trimmed.
+  Rewrites emit a `month_hint_normalized` warning naming the original text and
+  canonical value; already-canonical hints emit no rewrite note.
   Ambiguous, unrecognized or yearless hints (`late May 2027`, `May-June 2027`,
-  `May, 2027`, `May`, `banana`) become null with a `month_hint_follow_up` warning.
+  `May, 2027`, `May`, `banana`), including empty/whitespace strings at the forgiving
+  input boundary, become null with a `month_hint_follow_up` warning. Canonical
+  model/storage schemas still reject blank or noncanonical strings.
   No month/year is guessed. Unless an exact pair remains, dates count as missing;
   no additional date-consistency failure is emitted for the discarded hint.
   The raw redacted inquiry preserves context for the follow-up workflow.
+  A canonical month earlier than the calendar month of `received_at` emits a
+  `past_month` warning requesting confirmation; it does not change completeness.
+  Comparison uses the recorded timestamp's calendar offset, not the host timezone
+  or the current clock. The same month and far-future months are left alone.
 - Optional unknowns stay null. Defaults are not inserted by schemas or validators.
   Only apply planner-approved defaults, tag them as default and surface them in
   assumptions. Never default health, dietary needs, nationality or bookings to none.
@@ -92,10 +100,8 @@ structurally invalid payloads/context; otherwise they return:
 ```js
 {
   value, flags,
-  noFailures,
-  valid, // compatibility alias of noFailures
-  unassessedChecks, unassessedCheckCount,
-  readyToSend: false
+  noFailures, needsFollowUp,
+  unassessedChecks
   // Requirements reports additionally include complete.
 }
 ```
@@ -103,14 +109,26 @@ structurally invalid payloads/context; otherwise they return:
 `value` is a cloned, corrected record. Requirements metadata, itinerary cost
 summaries and itinerary validation flags are computed, not trusted from a model.
 Input objects are never mutated. `noFailures` means **no fail flags** in both APIs.
-`valid` has exactly the same meaning and remains for compatibility; prefer the
-explicit name in new consumers. Requirements `complete` reflects only the derived
+Requirements `complete` reflects only the derived
 top-level status, so a complete inquiry can still have semantic failures.
 Missing required fields produce failures, so incomplete inquiries have
 `noFailures: false`. Neither noFailures nor complete means approved, bookable or
-safe for client delivery. `readyToSend` is always false under the draft-only policy.
-`unassessedChecks` lists unique warning check names whose messages explicitly say
-"cannot assess"; `unassessedCheckCount` is its length, not the total warning count.
+safe for client delivery. Semantic results no longer include `valid`,
+`unassessedCheckCount`, or `readyToSend`; consumers must migrate to `noFailures`
+and use `unassessedChecks.length` if they need a count. Structural Ajv results
+retain their unrelated `{valid, errors}` shape.
+`needsFollowUp` is independent of `noFailures`: it is true for missing required
+information, unresolved nested facts, ambiguous/blank/yearless hints, past months,
+or unresolved date/party checks. It may coexist with `noFailures: true`. Mere
+normalization notes, unavailable feasibility integrations and missing internal
+pricing/evidence context do not themselves request client follow-up.
+An exact date pair does not need a redundant month hint, so that null member
+does not generate a partial-fields follow-up warning.
+`unassessedChecks` lists unique check names from flags with `unassessed: true`,
+not from message text. Both `unassessed` and `needsFollowUp` are optional boolean
+flag markers (absent means false), also permitted in stored itinerary flags.
+The report's `needsFollowUp` aggregates those markers. Model-written flags are
+discarded, including their markers.
 All warnings, including follow-up hints, still need planner attention.
 Mismatched metadata or contradictory numeric totals remain fail flags even though
 the returned values are corrected. Null summary placeholders may be filled from
@@ -171,7 +189,8 @@ canonical record, and flags stale completeness claims. Structural
 `validateContract('requirements', record)` stays strict and rejects noncanonical
 month strings; do not persist legacy values without normalization. The boundary
 schemas (`extractionInput`, `requirementsInput`) are permissive only for month-hint
-text, not missing wrapper members, extra fields or invalid system metadata.
+text (including blanks), not missing wrapper members, extra fields or invalid
+system metadata.
 
 ### Enforced semantic checks
 

@@ -22,7 +22,7 @@ function requirementProbe(name, edit, check) {
     edit(value);
     const report = validateRequirements(value);
     assert.ok(has(report, check), JSON.stringify(report.flags));
-    assert.equal(report.valid, false);
+    assert.equal(report.noFailures, false);
   });
 }
 
@@ -56,7 +56,7 @@ test('400 days is allowed: no implicit duration cap', () => {
   const value = clone(complete);
   value.duration_days.value = 400;
   value.dates.value = { start_date: null, end_date: null, flexible: true, month_hint: 'May 2027' };
-  assert.equal(validateRequirements(value).valid, true);
+  assert.equal(validateRequirements(value).noFailures, true);
 });
 
 test('month plus duration is complete; subfield unknown stays visible', () => {
@@ -69,7 +69,7 @@ test('month plus duration is complete; subfield unknown stays visible', () => {
 });
 
 test('complete fixture has no semantic failures', () => {
-  assert.equal(validateRequirements(complete).valid, true);
+  assert.equal(validateRequirements(complete).noFailures, true);
 });
 
 function itineraryProbe(name, edit, check, editContext = () => {}) {
@@ -80,7 +80,7 @@ function itineraryProbe(name, edit, check, editContext = () => {}) {
     editContext(trusted);
     const report = validateItinerary(value, complete, trusted);
     assert.ok(has(report, check), JSON.stringify(report.flags));
-    assert.equal(report.valid, false);
+    assert.equal(report.noFailures, false);
   });
 }
 
@@ -108,7 +108,7 @@ itineraryProbe('planner confirmed without evidence', x => {
 test('priced golden fixture computes mixed total/per-person costs', () => {
   const before = clone(priced);
   const report = validateItinerary(priced, complete, context);
-  assert.equal(report.valid, true, JSON.stringify(report.flags));
+  assert.equal(report.noFailures, true, JSON.stringify(report.flags));
   assert.deepEqual(report.value.cost_summary, priced.cost_summary);
   assert.ok(has(report, 'budget_fit', 'pass'));
   assert.ok(has(report, 'travel_times', 'warn'));
@@ -117,7 +117,7 @@ test('priced golden fixture computes mixed total/per-person costs', () => {
 
 test('v2 fixture keeps IDs, changes one item and adds one', () => {
   const report = validateItinerary(revision, complete, { ...context, history: [priced] });
-  assert.equal(report.valid, true, JSON.stringify(report.flags));
+  assert.equal(report.noFailures, true, JSON.stringify(report.flags));
   const old = new Map(priced.days.flatMap(d => d.items).map(i => [i.item_id, i]));
   const items = revision.days.flatMap(d => d.items);
   assert.deepEqual(items.filter(i => !old.has(i.item_id)).map(i => i.item_id), ['departure_transfer']);
@@ -140,7 +140,7 @@ test('money is summed as decimals, not binary floats', () => {
   Object.assign(value.days[0].items[1].cost, { amount: 0.1 });
   value.cost_summary = { total_estimate: 0.3, by_category: { flights: 0, hotels: 0.1, activities: 0, transfers: 0.2, other: 0 }, confidence: 'low' };
   const report = validateItinerary(value, complete, context);
-  assert.equal(report.valid, true, JSON.stringify(report.flags));
+  assert.equal(report.noFailures, true, JSON.stringify(report.flags));
   assert.equal(report.value.cost_summary.total_estimate, 0.3);
 });
 
@@ -151,7 +151,7 @@ test('trusted FX conversion is explicit and decimal', () => {
   const trusted = clone(context);
   trusted.fx_rates = [{ from: 'USD', to: 'INR', rate: '100', as_of: '2026-10-24', evidence_ref: 'fx_001' }];
   const report = validateItinerary(value, complete, trusted);
-  assert.equal(report.valid, true, JSON.stringify(report.flags));
+  assert.equal(report.noFailures, true, JSON.stringify(report.flags));
   assert.equal(report.value.cost_summary.total_estimate, 6000);
 });
 
@@ -170,7 +170,7 @@ test('AI may preserve an externally verified confirmation without supplier_ref',
   value.days[0].items[0].status = 'confirmed';
   value.days[0].items[0].cost.source = 'confirmed';
   const trusted = { ...context, evidence: [evidenceFor(value)] };
-  assert.equal(validateItinerary(value, complete, trusted).valid, true);
+  assert.equal(validateItinerary(value, complete, trusted).noFailures, true);
 });
 
 for (const [name, change] of [
@@ -253,7 +253,7 @@ test('unknown budget inclusions cannot pass budget validation', () => {
 test('summary adults includes seniors exactly once', () => {
   const inquiry = clone(complete);
   inquiry.party.value = { adults: 1, seniors: 1, children_ages: [] };
-  assert.equal(validateItinerary(priced, inquiry, context).valid, true);
+  assert.equal(validateItinerary(priced, inquiry, context).noFailures, true);
 });
 
 test('children need trusted chargeable counts for per-person costs', () => {
@@ -268,7 +268,7 @@ test('children need trusted chargeable counts for per-person costs', () => {
     ...context,
     per_person_counts: [{ itinerary_id: value.itinerary_id, version: 1, item_id: 'arrival_transfer', count: 2, evidence_ref: 'child_free_record' }]
   };
-  assert.equal(validateItinerary(value, inquiry, trusted).valid, true);
+  assert.equal(validateItinerary(value, inquiry, trusted).noFailures, true);
 });
 
 test('per-person budget is normalized using known party size', () => {
@@ -324,7 +324,7 @@ for (const [name, edit] of [
 
 test('explicitly unverified original examples remain blocked, not success-shaped', () => {
   const report = validateItinerary(require('../examples/itinerary.json'), require('../examples/requirements.json'), context);
-  assert.equal(report.valid, false);
+  assert.equal(report.noFailures, false);
   assert.ok(has(report, 'required_fields'));
   assert.equal(report.value.cost_summary.total_estimate, null);
 });
@@ -334,7 +334,7 @@ test('null summary placeholders are populated from known prices without failing'
   value.cost_summary.total_estimate = null;
   for (const category of Object.keys(value.cost_summary.by_category)) value.cost_summary.by_category[category] = null;
   const report = validateItinerary(value, complete, context);
-  assert.equal(report.valid, true, JSON.stringify(report.flags));
+  assert.equal(report.noFailures, true, JSON.stringify(report.flags));
   assert.deepEqual(report.value.cost_summary, priced.cost_summary);
 });
 
@@ -380,7 +380,7 @@ test('quoted records require expiry, confirmed evidence may have no expiry', () 
   value.days[0].items[0].cost.source = 'confirmed';
   evidence = evidenceFor(value);
   evidence.valid_until = null;
-  assert.equal(validateItinerary(value, complete, { ...context, evidence: [evidence] }).valid, true);
+  assert.equal(validateItinerary(value, complete, { ...context, evidence: [evidence] }).noFailures, true);
 });
 
 test('unsupported pricing confidence is visibly lowered, not accepted as model judgment', () => {
@@ -403,7 +403,7 @@ test('yearless month requires follow-up without inventing a year', () => {
   const value = clone(complete);
   value.dates.value = { start_date: null, end_date: null, flexible: true, month_hint: 'May' };
   const report = validateRequirements(value);
-  assert.equal(report.valid, false);
+  assert.equal(report.noFailures, false);
   assert.equal(report.value.status, 'incomplete');
   assert.equal(report.value.dates.value.month_hint, null);
   assert.ok(has(report, 'month_hint_follow_up', 'warn'));

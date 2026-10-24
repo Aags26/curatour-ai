@@ -21,7 +21,7 @@ const systemSchema = {
 };
 const extractionInputSchema = structuredClone(extractionSchema);
 extractionInputSchema.properties.dates.allOf[1].properties.value.properties.month_hint = {
-  anyOf: [{ $ref: '#/$defs/text' }, { type: 'null' }]
+  type: ['string', 'null']
 };
 const requirementsInputSchema = structuredClone(requirementsSchema);
 delete requirementsInputSchema.$id;

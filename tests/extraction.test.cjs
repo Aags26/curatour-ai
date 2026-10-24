@@ -65,7 +65,7 @@ for (const hint of ['May 2027', 'may 2027', '2027-05', '  May 2027  ', 'Sep 2027
   });
 }
 
-for (const hint of ['banana', 'May', 'Sept', 'May, 2027', 'late May 2027', 'May-June 2027', 'mid-May', '2027-13']) {
+for (const hint of ['', ' ', '\t\n', 'banana', 'May', 'Sept', 'May, 2027', 'late May 2027', 'May-June 2027', 'mid-May', '2027-13']) {
   test(`ambiguous/yearless hint produces follow-up, not duplicate date failure: ${hint}`, () => {
     const { extraction, system } = inputs();
     extraction.dates.value = { start_date: null, end_date: null, flexible: true, month_hint: hint };
@@ -94,7 +94,7 @@ test('exact date pair remains sufficient when an ambiguous hint is removed', () 
   assert.equal(result.value.dates.value.month_hint, null);
 });
 
-for (const hint of ['Sept 2027', 'May', 'banana', '2027-00', '2027-13']) {
+for (const hint of ['', ' ', 'Sept 2027', 'May', 'banana', '2027-00', '2027-13']) {
   test(`canonical stored/model contract rejects noncanonical month: ${hint}`, () => {
     const { extraction } = inputs();
     extraction.dates.value.month_hint = hint;
@@ -125,18 +125,119 @@ test('system and extraction payloads cannot overwrite one another', () => {
   assert.throws(() => requirementsFromExtraction(extraction, inputs().system), /Invalid extractionInput contract/);
 });
 
-test('noFailures is never readiness, and unassessed checks are counted uniquely', () => {
+test('semantic result has no redundant aliases and lists structured unassessed checks', () => {
   const { extraction, system } = inputs();
   const intake = requirementsFromExtraction(extraction, system);
-  assert.equal(intake.valid, intake.noFailures);
-  assert.equal(intake.readyToSend, false);
+  assert.equal(intake.needsFollowUp, false);
   const result = validateItinerary(priced, intake.value, {
     as_of: '2026-10-24T11:00:00+05:30',
     pricing_categories: ['hotels', 'transfers', 'other']
   });
   assert.equal(result.noFailures, true);
-  assert.equal(result.valid, result.noFailures);
-  assert.equal(result.readyToSend, false);
-  assert.equal(result.unassessedCheckCount, 5);
+  for (const report of [intake, result]) {
+    for (const key of ['valid', 'readyToSend', 'unassessedCheckCount']) assert.equal(Object.hasOwn(report, key), false);
+    assert.deepEqual(report.unassessedChecks, [...new Set(report.flags.filter(f => f.unassessed === true).map(f => f.check))]);
+  }
+  assert.deepEqual(Object.keys(intake).sort(), ['value', 'flags', 'noFailures', 'needsFollowUp', 'complete', 'unassessedChecks'].sort());
+  assert.deepEqual(Object.keys(result).sort(), ['value', 'flags', 'noFailures', 'needsFollowUp', 'unassessedChecks'].sort());
   assert.deepEqual(result.unassessedChecks, ['travel_times', 'opening_days', 'visa_lead_time', 'valid_suppliers', 'constraint_coverage']);
+});
+
+for (const [hint, past] of [
+  ['January 2020', true], ['2026-09', true], ['2026-10', false],
+  ['2026-11', false], ['9999-12', false]
+]) {
+  test(`past-month warning against received_at: ${hint}`, () => {
+    const { extraction, system } = inputs();
+    extraction.dates.value = { start_date: null, end_date: null, flexible: true, month_hint: hint };
+    const report = requirementsFromExtraction(extraction, system);
+    const warnings = report.flags.filter(f => f.check === 'past_month');
+    assert.equal(warnings.length, past ? 1 : 0);
+    assert.equal(report.noFailures, true);
+    assert.equal(report.complete, true);
+    if (past) {
+      assert.equal(warnings[0].status, 'warn');
+      assert.equal(warnings[0].needsFollowUp, true);
+    }
+  });
+}
+
+test('past-month comparison uses received_at calendar offset, not UTC or system time', () => {
+  const { extraction, system } = inputs();
+  system.received_at = '2026-11-01T00:30:00+14:00';
+  extraction.dates.value = { start_date: null, end_date: null, flexible: true, month_hint: '2026-10' };
+  assert.ok(requirementsFromExtraction(extraction, system).flags.some(f => f.check === 'past_month'));
+  system.received_at = '2026-10-31T23:30:00-12:00';
+  assert.ok(!requirementsFromExtraction(extraction, system).flags.some(f => f.check === 'past_month'));
+});
+
+test('normalization warns with exact original text; canonical input is not a rewrite', () => {
+  const { extraction, system } = inputs();
+  extraction.dates.value.month_hint = '  Sept 2027  ';
+  extraction.dates.value.start_date = null;
+  extraction.dates.value.end_date = null;
+  const before = structuredClone(extraction);
+  const report = requirementsFromExtraction(extraction, system);
+  const note = report.flags.find(f => f.check === 'month_hint_normalized');
+  assert.equal(note.status, 'warn');
+  assert.ok(note.message.includes(JSON.stringify('  Sept 2027  ')));
+  assert.ok(note.message.includes('2027-09'));
+  assert.ok(!note.needsFollowUp);
+  assert.deepEqual(extraction, before);
+  extraction.dates.value.month_hint = '2027-09';
+  assert.ok(!requirementsFromExtraction(extraction, system).flags.some(f => f.check === 'month_hint_normalized'));
+});
+
+test('blank-only dates become an unknown wrapper at either forgiving boundary', () => {
+  const { extraction, system } = inputs();
+  extraction.dates.value = { start_date: null, end_date: null, flexible: null, month_hint: '' };
+  for (const report of [
+    requirementsFromExtraction(extraction, system),
+    validateRequirements({ ...complete, dates: extraction.dates })
+  ]) {
+    assert.deepEqual(report.value.dates, { value: null, source: null, confidence: null });
+    assert.equal(report.needsFollowUp, true);
+    assert.ok(report.flags.some(f => f.check === 'month_hint_follow_up'));
+    assert.ok(!report.flags.some(f => f.check === 'empty_object'));
+  }
+});
+
+test('follow-up is independent of failures and normalization notes', () => {
+  const { extraction, system } = inputs();
+  extraction.dates.value = { start_date: '2027-05-01', end_date: '2027-05-02', flexible: false, month_hint: 'May 2027' };
+  const completeWithNote = requirementsFromExtraction(extraction, system);
+  assert.equal(completeWithNote.needsFollowUp, false);
+  assert.equal(completeWithNote.noFailures, true);
+  extraction.destination = { value: null, source: null, confidence: null };
+  const incomplete = requirementsFromExtraction(extraction, system);
+  assert.equal(incomplete.needsFollowUp, true);
+  assert.equal(incomplete.noFailures, false);
+  assert.equal(incomplete.complete, false);
+});
+
+test('unassessed checks are explicit, deduplicated, and cannot be injected via model flags', () => {
+  const draft = structuredClone(priced);
+  draft.validation_flags = [{ check: 'fake', status: 'warn', message: 'cannot assess', unassessed: true, needsFollowUp: true }];
+  const report = validateItinerary(draft, complete, {
+    as_of: '2026-10-24T11:00:00+05:30'
+  });
+  assert.ok(!report.unassessedChecks.includes('fake'));
+  assert.ok(report.unassessedChecks.includes('pricing_scope'));
+  assert.ok(report.unassessedChecks.includes('cost_completeness'));
+  assert.ok(report.unassessedChecks.includes('budget_fit'));
+  assert.equal(report.needsFollowUp, false);
+  assert.equal(new Set(report.unassessedChecks).size, report.unassessedChecks.length);
+  assert.equal(validateContract('itinerary', report.value).valid, true);
+  assert.equal(validateContract('itinerary', {
+    ...draft, validation_flags: [{ check: 'test', status: 'warn', message: 'test', unassessed: 'yes' }]
+  }).valid, false);
+});
+
+test('warning prose containing cannot assess does not manufacture an unassessed check', () => {
+  const { extraction, system } = inputs();
+  extraction.dates.value = { start_date: null, end_date: null, flexible: true, month_hint: 'cannot assess' };
+  const report = requirementsFromExtraction(extraction, system);
+  assert.ok(report.flags.some(f => f.message.includes('cannot assess')));
+  assert.deepEqual(report.unassessedChecks, []);
+  assert.equal(report.needsFollowUp, true);
 });
